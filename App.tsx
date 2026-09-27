@@ -750,11 +750,30 @@ export default function App() {
     />
   );
 
+  const renderWebMap = () => {
+    const center = selectedCoordinates ?? userCoordinates ?? mapRegion;
+    const latitudeDelta = Math.max(mapRegion.latitudeDelta, 0.002);
+    const longitudeDelta = Math.max(mapRegion.longitudeDelta, 0.002);
+    const left = center.longitude - longitudeDelta;
+    const right = center.longitude + longitudeDelta;
+    const bottom = center.latitude - latitudeDelta;
+    const top = center.latitude + latitudeDelta;
+    const marker = selectedCoordinates
+      ? `&marker=${selectedCoordinates.latitude}%2C${selectedCoordinates.longitude}`
+      : '';
+    const source = `https://www.openstreetmap.org/export/embed.html?bbox=${left}%2C${bottom}%2C${right}%2C${top}&layer=mapnik${marker}`;
+
+    return React.createElement('iframe', {
+      key: `${center.latitude}-${center.longitude}-${selectedCoordinates?.latitude ?? 'none'}-${selectedCoordinates?.longitude ?? 'none'}`,
+      title: 'OpenStreetMap delivery location',
+      src: source,
+      style: { width: '100%', height: '100%', border: 0 },
+    });
+  };
+
   const renderAddressMap = () => (
     Platform.OS === 'web' ? (
-      <View style={[styles.addressMap, styles.addressMapFallback]}>
-        <Text style={styles.placesHelperText}>Map pin selection is available in the mobile app.</Text>
-      </View>
+      renderWebMap()
     ) : googleMapsEnabled && !googleMapsApiKey ? (
       <View style={[styles.addressMap, styles.addressMapFallback]}>
         <Text style={styles.placesErrorText}>Google Maps is enabled, but its API key is missing from .env.</Text>
