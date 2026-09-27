@@ -1,8 +1,9 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   Alert,
   BackHandler,
   Dimensions,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Pressable,
@@ -355,6 +356,18 @@ export default function App() {
   const [deliveryTime, setDeliveryTime] = useState('6:00 AM');
   const [userLocation, setUserLocation] = useState<string | null>(null);
   const [userCoordinates, setUserCoordinates] = useState<Coordinates | null>(null);
+  const addressScrollRef = useRef<ScrollView>(null);
+
+  const scrollAddressFormIntoView = () => {
+    setTimeout(() => addressScrollRef.current?.scrollToEnd({ animated: true }), 120);
+  };
+
+  useEffect(() => {
+    if (!locationModalVisible || Platform.OS !== 'android') return;
+
+    const keyboardSubscription = Keyboard.addListener('keyboardDidShow', scrollAddressFormIntoView);
+    return () => keyboardSubscription.remove();
+  }, [locationModalVisible]);
 
   useEffect(() => {
     if (!locationModalVisible || !googleMapsEnabled || !googleMapsApiKey || googleMapReady || googleMapFailed) return;
@@ -1303,9 +1316,10 @@ export default function App() {
         ) : (
         <KeyboardAvoidingView
           style={styles.modalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <ScrollView
+            ref={addressScrollRef}
             style={styles.modalCard}
             contentContainerStyle={styles.addressModalContent}
             keyboardShouldPersistTaps="handled"
@@ -1434,6 +1448,7 @@ export default function App() {
               placeholder="Flat, house number, building, street"
               value={newHouseDetails}
               onChangeText={setNewHouseDetails}
+              onFocus={scrollAddressFormIntoView}
               style={styles.addressTextInput}
               placeholderTextColor="#9CA3AF"
             />
@@ -1441,6 +1456,7 @@ export default function App() {
               placeholder="Nearby landmark (optional)"
               value={newLandmark}
               onChangeText={setNewLandmark}
+              onFocus={scrollAddressFormIntoView}
               style={styles.addressTextInput}
               placeholderTextColor="#9CA3AF"
             />
