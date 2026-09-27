@@ -17,6 +17,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
+      "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION"
@@ -33,6 +34,11 @@
           "locationAlwaysAndWhenInUsePermission": "Allow Azad Dairy to access your location to show nearby delivery options."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "8a3ccdcd-408b-4497-a26d-cdce515b08b7"
+      }
+    }
   }
 }

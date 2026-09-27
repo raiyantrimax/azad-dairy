@@ -3,6 +3,7 @@ import {
   Alert,
   BackHandler,
   Dimensions,
+  KeyboardAvoidingView,
   Modal,
   Pressable,
   ScrollView,
@@ -1300,11 +1301,15 @@ export default function App() {
             </SafeAreaView>
           </View>
         ) : (
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
           <ScrollView
             style={styles.modalCard}
             contentContainerStyle={styles.addressModalContent}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             nestedScrollEnabled
           >
             <View style={styles.modalHeader}>
@@ -1449,7 +1454,7 @@ export default function App() {
               </TouchableOpacity>
             </View>
           </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
         )}
       </Modal>
       </SafeAreaView>
