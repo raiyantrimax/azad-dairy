@@ -3,7 +3,6 @@ import {
   Alert,
   BackHandler,
   Dimensions,
-  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Pressable,
@@ -361,13 +360,6 @@ export default function App() {
   const scrollAddressFormIntoView = () => {
     setTimeout(() => addressScrollRef.current?.scrollToEnd({ animated: true }), 120);
   };
-
-  useEffect(() => {
-    if (!locationModalVisible || Platform.OS !== 'android') return;
-
-    const keyboardSubscription = Keyboard.addListener('keyboardDidShow', scrollAddressFormIntoView);
-    return () => keyboardSubscription.remove();
-  }, [locationModalVisible]);
 
   useEffect(() => {
     if (!locationModalVisible || !googleMapsEnabled || !googleMapsApiKey || googleMapReady || googleMapFailed) return;
