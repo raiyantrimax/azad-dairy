@@ -18,7 +18,15 @@ import {
 import * as Location from 'expo-location';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+
+// react-native-maps is native-only in this app; avoid loading its native code on web.
+const mapsModule = Platform.OS === 'web'
+  ? null
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  : require('react-native-maps') as typeof import('react-native-maps');
+const MapView = mapsModule?.default!;
+const Marker = mapsModule?.Marker!;
+const PROVIDER_GOOGLE = mapsModule?.PROVIDER_GOOGLE;
 
 type TabName = 'Home' | 'Cart' | 'Profile';
 type CategoryName = 'All' | 'Milk' | 'Curd' | 'Ghee' | 'Paneer' | 'Sweets';
