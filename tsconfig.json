@@ -2,5 +2,10 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true
-  }
+  },
+  "exclude": [
+    "App_backup.tsx",
+    "App_clean.tsx",
+    "App_new.tsx"
+  ]
 }
