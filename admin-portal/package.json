@@ -1,0 +1,26 @@
+{
+  "name": "azad-dairy-admin-portal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Admin dashboard and API for the Azad Dairy mobile app",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "seed": "node server.js --seed",
+    "lint": "expo lint"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongodb": "^6.20.0",
+    "mongoose": "^8.19.1",
+    "multer": "^2.0.2"
+  }
+}

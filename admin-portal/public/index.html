@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f8f5">
+  <title>Azad Dairy | Admin</title>
+  <link rel="stylesheet" href="/admin/styles.css">
+</head>
+<body>
+  <section id="loginView" class="login-shell">
+    <div class="login-brand"><span class="brand-mark">A</span><span>AZAD <b>DAIRY</b></span></div>
+    <div class="login-panel">
+      <p class="eyebrow">OPERATIONS CONSOLE</p>
+      <h1>Welcome back</h1>
+      <p class="muted">Sign in to manage your store, customers and subscriptions.</p>
+      <form id="loginForm" class="form-stack">
+        <label>Email<input name="email" type="email" autocomplete="username" required></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+        <button class="button button-primary button-wide" type="submit">Sign in</button>
+      </form>
+      <p id="loginError" class="error-text" role="alert"></p>
+    </div>
+    <p class="login-footnote">Authorized staff only</p>
+  </section>
+
+  <div id="dashboardApp" class="app-shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="#dashboard"><span class="brand-mark">A</span><span>AZAD <b>DAIRY</b><small>ADMIN CONSOLE</small></span></a>
+      <nav class="nav-list" aria-label="Admin sections">
+        <button class="nav-link active" data-view="dashboard"><span>◫</span>Overview</button>
+        <button class="nav-link" data-view="orders"><span>▤</span>Orders</button>
+        <button class="nav-link" data-view="subscriptions"><span>↻</span>Subscriptions</button>
+        <button class="nav-link" data-view="products"><span>▦</span>Products</button>
+        <button class="nav-link" data-view="users"><span>♙</span>Customers</button>
+        <button class="nav-link" data-view="coupons"><span>%</span>Coupons</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="admin-identity"><span class="avatar">A</span><span><b id="adminName">Administrator</b><small>Store manager</small></span></div>
+        <button id="logoutButton" class="logout-button">Sign out</button>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <div><p class="eyebrow">AZAD DAIRY / <span id="breadcrumb">OVERVIEW</span></p><h1 id="pageTitle">Store overview</h1></div>
+        <div class="topbar-meta"><span class="live-dot"></span><span>Store data</span><button id="refreshButton" class="icon-button" aria-label="Refresh dashboard" title="Refresh">↻</button></div>
+      </header>
+      <div id="globalNotice" class="notice" role="status" hidden></div>
+
+      <section id="view-dashboard" class="view-section">
+        <div class="view-heading"><div><h2>Today at a glance</h2><p class="muted">Orders and subscription activity from your store.</p></div></div>
+        <div class="stat-grid">
+          <article class="stat-tile"><span>Gross revenue</span><strong id="statRevenue">₹0</strong><small>Placed orders, before refunds</small></article>
+          <article class="stat-tile"><span>Orders</span><strong id="statOrders">0</strong><small>All non-cancelled orders</small></article>
+          <article class="stat-tile"><span>Customers</span><strong id="statUsers">0</strong><small>Registered active accounts</small></article>
+          <article class="stat-tile"><span>Active subscriptions</span><strong id="statActiveSubs">0</strong><small><i id="statExpiredSubs">0</i> ended</small></article>
+        </div>
+        <div class="dashboard-columns">
+          <section class="panel"><div class="panel-heading"><div><h3>Recent orders</h3><p>Latest order activity</p></div><button class="text-button" data-goto="orders">All orders →</button></div><div id="recentOrders" class="compact-list"></div></section>
+          <section class="panel"><div class="panel-heading"><div><h3>Subscription watch</h3><p>Current and upcoming plans</p></div><button class="text-button" data-goto="subscriptions">View subscriptions →</button></div><div id="subscriptionWatch" class="compact-list"></div></section>
+        </div>
+      </section>
+
+      <section id="view-users" class="view-section" hidden>
+        <div class="view-heading"><div><h2>Customers</h2><p class="muted">Registered accounts and contact details.</p></div><input id="userSearch" class="search-input" placeholder="Search name, email or phone"></div>
+        <div class="panel table-panel"><div class="table-scroll"><table><thead><tr><th>Customer</th><th>Phone</th><th>Addresses</th><th>Joined</th><th>Status</th><th></th></tr></thead><tbody id="usersTable"></tbody></table></div></div>
+      </section>
+
+      <section id="view-products" class="view-section" hidden>
+        <div class="view-heading"><div><h2>Products</h2><p class="muted">Catalog, stock, discounts and subscription availability.</p></div><button id="addProductButton" class="button button-primary">＋ Add product</button></div>
+        <div class="panel table-panel"><div class="table-scroll"><table><thead><tr><th>Product</th><th>Category</th><th>Price / MRP</th><th>Discount</th><th>Stock</th><th>Visibility</th><th></th></tr></thead><tbody id="productsTable"></tbody></table></div></div>
+      </section>
+
+      <section id="view-orders" class="view-section" hidden>
+        <div class="view-heading"><div><h2>Orders</h2><p class="muted">Cart line items, applied discounts, totals and delivery address.</p></div></div>
+        <div class="panel table-panel"><div class="table-scroll"><table><thead><tr><th>Order</th><th>Customer</th><th>Placed</th><th>Items</th><th>Delivery address</th><th>Discount</th><th>Total</th><th>Status</th></tr></thead><tbody id="ordersTable"></tbody></table></div></div>
+      </section>
+
+      <section id="view-subscriptions" class="view-section" hidden>
+        <div class="view-heading"><div><h2>Subscriptions</h2><p class="muted">Start/end dates, delivery schedules and current status.</p></div><select id="subscriptionFilter" class="select-input"><option value="all">All statuses</option><option value="active">Active</option><option value="scheduled">Scheduled</option><option value="expired">Ended</option><option value="cancelled">Cancelled</option></select></div>
+        <div class="panel table-panel"><div class="table-scroll"><table><thead><tr><th>Customer</th><th>Product</th><th>Plan</th><th>Qty / delivery</th><th>Starts</th><th>Ends</th><th>Status</th><th></th></tr></thead><tbody id="subscriptionsTable"></tbody></table></div></div>
+      </section>
+
+      <section id="view-coupons" class="view-section" hidden>
+        <div class="view-heading"><div><h2>Coupons</h2><p class="muted">Promotional codes and usage limits.</p></div><button id="addCouponButton" class="button button-primary">＋ Add coupon</button></div>
+        <div class="panel table-panel"><div class="table-scroll"><table><thead><tr><th>Code</th><th>Offer</th><th>Minimum</th><th>Usage</th><th>Valid until</th><th>Status</th><th></th></tr></thead><tbody id="couponsTable"></tbody></table></div></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="productDialog" class="editor-dialog">
+    <form id="productForm" class="editor-form">
+      <div class="dialog-heading"><div><p class="eyebrow">CATALOG</p><h2 id="productDialogTitle">Add product</h2></div><button type="button" class="icon-button" data-close="productDialog" aria-label="Close">×</button></div>
+      <input type="hidden" name="id">
+      <div class="form-grid">
+        <label>Product name<input name="name" required maxlength="140"></label>
+        <label>Slug<input name="slug" placeholder="generated from name"></label>
+        <label>Category<input name="category" required placeholder="Milk, Curds, Ghee..."></label>
+        <label>Unit / pack size<input name="unit" required placeholder="1 L, 500 g"></label>
+        <label>Base price (₹)<input name="price" type="number" min="0" step="0.01" required></label>
+        <label>MRP (₹)<input name="mrp" type="number" min="0" step="0.01" required></label>
+        <label>Available stock<input name="stock" type="number" min="0" step="1" value="0"></label>
+        <label>Rating<input name="rating" type="number" min="0" max="5" step="0.1" value="0"></label>
+        <label class="span-two">Full description<textarea name="description" rows="3" required maxlength="3000"></textarea></label>
+        <label>Display icon / fallback<input name="image" value="🥛" maxlength="10"></label>
+        <label>Search tags<input name="tags" placeholder="fresh, organic, family pack"></label>
+        <label>Discount type<select name="discountKind"><option value="percentage">Percentage</option><option value="fixed">Fixed amount (₹)</option></select></label>
+        <label>Discount value<input name="discountValue" type="number" min="0" step="0.01" value="0"></label>
+        <label>Discount starts<input name="discountStartsAt" type="datetime-local"></label>
+        <label>Discount ends<input name="discountEndsAt" type="datetime-local"></label>
+        <label class="span-two">Product images<input name="images" type="file" accept="image/*" multiple><small>Up to 8 images, 5 MB each. Stored in MongoDB GridFS.</small></label>
+        <div id="existingImages" class="existing-images span-two"></div>
+        <label class="check-label"><input name="subscriptionAllowed" type="checkbox" checked> Available for subscription</label>
+        <label class="check-label"><input name="active" type="checkbox" checked> Visible in store</label>
+      </div>
+      <p class="form-error" id="productFormError"></p>
+      <div class="dialog-actions"><button type="button" class="button button-quiet" data-close="productDialog">Cancel</button><button class="button button-primary" type="submit">Save product</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="couponDialog" class="editor-dialog">
+    <form id="couponForm" class="editor-form">
+      <div class="dialog-heading"><div><p class="eyebrow">PROMOTIONS</p><h2 id="couponDialogTitle">Add coupon</h2></div><button type="button" class="icon-button" data-close="couponDialog" aria-label="Close">×</button></div>
+      <input type="hidden" name="id">
+      <div class="form-grid">
+        <label>Coupon code<input name="code" required maxlength="32" autocapitalize="characters"></label>
+        <label>Offer description<input name="description"></label>
+        <label>Discount type<select name="kind"><option value="percentage">Percentage</option><option value="fixed">Fixed amount (₹)</option></select></label>
+        <label>Discount value<input name="value" type="number" min="0.01" step="0.01" required></label>
+        <label>Minimum order (₹)<input name="minimumOrder" type="number" min="0" step="0.01" value="0"></label>
+        <label>Maximum discount cap (₹)<input name="maximumDiscount" type="number" min="0" step="0.01" value="0"><small>0 means no cap</small></label>
+        <label>Starts at<input name="startsAt" type="datetime-local"></label>
+        <label>Ends at<input name="endsAt" type="datetime-local"></label>
+        <label>Maximum uses<input name="maxUses" type="number" min="0" step="1" value="0"><small>0 means unlimited</small></label>
+        <label>Product IDs<input name="productIds" placeholder="Optional comma-separated IDs"></label>
+        <label class="check-label"><input name="active" type="checkbox" checked> Active</label>
+      </div>
+      <p class="form-error" id="couponFormError"></p>
+      <div class="dialog-actions"><button type="button" class="button button-quiet" data-close="couponDialog">Cancel</button><button class="button button-primary" type="submit">Save coupon</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="userDialog" class="editor-dialog editor-dialog-small">
+    <form id="userForm" class="editor-form">
+      <div class="dialog-heading"><div><p class="eyebrow">CUSTOMER ACCOUNT</p><h2>Edit customer</h2></div><button type="button" class="icon-button" data-close="userDialog" aria-label="Close">×</button></div>
+      <input type="hidden" name="id">
+      <label>Name<input name="name" required></label>
+      <label>Phone<input name="phone"></label>
+      <label>Status<select name="status"><option value="active">Active</option><option value="disabled">Disabled</option></select></label>
+      <p class="form-error" id="userFormError"></p>
+      <div class="dialog-actions"><button type="button" class="button button-quiet" data-close="userDialog">Cancel</button><button class="button button-primary" type="submit">Save customer</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="subscriptionDialog" class="editor-dialog editor-dialog-small">
+    <form id="subscriptionForm" class="editor-form">
+      <div class="dialog-heading"><div><p class="eyebrow">SUBSCRIPTION</p><h2>Update subscription</h2></div><button type="button" class="icon-button" data-close="subscriptionDialog" aria-label="Close">×</button></div>
+      <input type="hidden" name="id">
+      <label>End date<input name="endDate" type="date"></label>
+      <label>Status<select name="status"><option value="scheduled">Scheduled</option><option value="active">Active</option><option value="expired">Ended</option><option value="cancelled">Cancelled</option></select></label>
+      <p class="muted">Clear the end date for an ongoing plan. Past end dates are shown as ended.</p>
+      <p class="form-error" id="subscriptionFormError"></p>
+      <div class="dialog-actions"><button type="button" class="button button-quiet" data-close="subscriptionDialog">Cancel</button><button class="button button-primary" type="submit">Save subscription</button></div>
+    </form>
+  </dialog>
+
+  <script src="/admin/admin.js" defer></script>
+</body>
+</html>
