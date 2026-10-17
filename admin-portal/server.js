@@ -18,12 +18,21 @@ const corsOrigins = (process.env.CORS_ORIGINS || '').split(',').map((origin) => 
 if (!jwtSecret) throw new Error('Set JWT_SECRET before starting the service.');
 
 app.disable('x-powered-by');
-app.use(cors({
-  origin(origin, callback) {
-    if (!origin || !corsOrigins.length || corsOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error('This origin is not allowed by CORS.'));
-  },
-}));
+app.use((req, res, next) => {
+  const requestOrigin = req.get('origin');
+  const forwardedHost = req.get('x-forwarded-host')?.split(',')[0].trim();
+  const host = forwardedHost || req.get('host');
+  const forwardedProtocol = req.get('x-forwarded-proto')?.split(',')[0].trim();
+  const protocol = forwardedProtocol || req.protocol;
+  const isSameOrigin = Boolean(requestOrigin && host && requestOrigin === `${protocol}://${host}`);
+
+  return cors({
+    origin(origin, callback) {
+      if (!origin || isSameOrigin || !corsOrigins.length || corsOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error('This origin is not allowed by CORS.'));
+    },
+  })(req, res, next);
+});
 app.use(express.json({ limit: '1mb' }));
 
 const addressSchema = new mongoose.Schema({
