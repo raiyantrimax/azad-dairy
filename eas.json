@@ -6,9 +6,14 @@
         "buildType": "apk"
       },
       "env": {
+        "EXPO_PUBLIC_API_URL": "https://azad-dairy.onrender.com",
         "EXPO_PUBLIC_USE_GOOGLE_MAPS": "false"
       }
     },
-    "production": {}
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://azad-dairy.onrender.com"
+      }
+    }
   }
 }

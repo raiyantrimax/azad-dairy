@@ -1,4 +1,5 @@
 (() => {
+  const tokenKey = 'azad-admin-token';
   const state = { token: '', user: null, products: [], users: [], orders: [], subscriptions: [], coupons: [], imageIds: [] };
   const titles = { dashboard: 'Store overview', users: 'Customers', products: 'Products', orders: 'Orders', subscriptions: 'Subscriptions', coupons: 'Coupons' };
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -146,7 +147,8 @@
   function setLoggedIn(user, token) {
     state.user = user;
     state.token = token;
-    sessionStorage.setItem('azad-admin-token', token);
+    localStorage.setItem(tokenKey, token);
+    sessionStorage.removeItem(tokenKey);
     $('#adminName').textContent = user.name || user.email;
     $('#loginView').hidden = true;
     $('#dashboardApp').hidden = false;
@@ -156,7 +158,8 @@
   function logout() {
     state.token = '';
     state.user = null;
-    sessionStorage.removeItem('azad-admin-token');
+    localStorage.removeItem(tokenKey);
+    sessionStorage.removeItem(tokenKey);
     $('#dashboardApp').hidden = true;
     $('#loginView').hidden = false;
   }
@@ -566,8 +569,10 @@
   $$('[data-close]').forEach((button) => button.addEventListener('click', () => $(`#${button.dataset.close}`).close()));
 
   document.addEventListener('DOMContentLoaded', () => {
-    const token = sessionStorage.getItem('azad-admin-token');
+    const token = localStorage.getItem(tokenKey) || sessionStorage.getItem(tokenKey);
     if (!token) return;
+    localStorage.setItem(tokenKey, token);
+    sessionStorage.removeItem(tokenKey);
     state.token = token;
     request('/api/auth/me').then(({ user }) => setLoggedIn(user, token)).catch(logout);
   });

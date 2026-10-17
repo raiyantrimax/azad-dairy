@@ -169,7 +169,8 @@ td small { margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1
   .nav-list { display: flex; overflow-x: auto; gap: 4px; }
   .nav-link { min-height: 38px; flex: 0 0 auto; gap: 7px; padding: 0 10px; font-size: 11px; }
   .nav-link > span { width: auto; font-size: 14px; }
-  .sidebar-bottom { display: none; }
+  .sidebar-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; padding: 8px 5px 0; border-top: 1px solid #ffffff24; }
+  .logout-button { padding: 7px 9px; border: 1px solid #ffffff35; border-radius: 6px; }
   .app-shell { display: flex; flex-direction: column; }
   .main-area { width: 100%; margin: 0; padding: 0 12px 28px; }
   .topbar { min-height: 75px; margin-bottom: 18px; }

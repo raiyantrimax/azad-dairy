@@ -20,7 +20,7 @@ After the first deployment, run `npm run seed` from the service shell to create 
 
 ## Connect the Expo app
 
-Set `EXPO_PUBLIC_API_URL` to the deployed service origin (for example, `https://your-service.onrender.com`) in the Expo build environment. For local development, use the computer's LAN IP for a physical phone; `localhost` on a phone points to the phone itself. Restart Expo after changing the variable. The app keeps its demo catalog when the API URL is unset.
+Use `EXPO_PUBLIC_API_URL=https://azad-dairy.onrender.com` in the Expo environment for local development and builds. Keep `.env.local` set to the same URL because Expo loads it before `.env`. The EAS `preview` and `production` profiles also set this URL. Restart Expo after changing the variable. The app keeps its demo catalog when the API URL is unset.
 
 ## Data and API behavior
 

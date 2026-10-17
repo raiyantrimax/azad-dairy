@@ -391,6 +391,7 @@ export default function App() {
   const [subscriptionProductChoices, setSubscriptionProductChoices] = useState<Product[]>([]);
   const [productSubscriptionPlan, setProductSubscriptionPlan] = useState<ProductSubscriptionPlan>('Daily');
   const [productSubscriptionQuantity, setProductSubscriptionQuantity] = useState(1);
+  const [subscriptionQuantities, setSubscriptionQuantities] = useState<Record<string, number>>({});
   const [productSubscriptionDays, setProductSubscriptionDays] = useState<string[]>(['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']);
   const [productSubscriptionStartDate, setProductSubscriptionStartDate] = useState(() => {
     const tomorrow = new Date();
@@ -823,6 +824,15 @@ export default function App() {
   };
 
   const updateCartQuantity = (productId: string | number, delta: number) => {
+    const item = cart.find((cartItem) => String(cartItem.id) === String(productId));
+    if (
+      item
+      && item.quantity + delta <= 0
+      && checkoutSubscription
+      && String(checkoutSubscription.product.id) === String(productId)
+    ) {
+      setCheckoutSubscription(null);
+    }
     setCart((current) =>
       current
         .map((item) =>
@@ -838,18 +848,37 @@ export default function App() {
   ) => {
     const firstProduct = existingSubscription?.product ?? productsToSubscribe[0];
     if (!firstProduct) return;
+    const initialQuantities: Record<string, number> = {};
+    productsToSubscribe.forEach((product) => {
+      const productId = String(product.id);
+      initialQuantities[productId] = subscriptionQuantities[productId]
+        ?? cart.find((item) => item.id === product.id)?.quantity
+        ?? 1;
+    });
+    if (existingSubscription) initialQuantities[String(firstProduct.id)] = existingSubscription.quantity;
+    const initialQuantity = existingSubscription?.quantity
+      ?? initialQuantities[String(firstProduct.id)]
+      ?? cart.find((item) => item.id === firstProduct.id)?.quantity
+      ?? 1;
+    initialQuantities[String(firstProduct.id)] = initialQuantity;
+    setSubscriptionQuantities(initialQuantities);
     setSubscriptionProductChoices(productsToSubscribe);
     setSubscriptionProduct(firstProduct);
     setProductSubscriptionPlan(existingSubscription?.plan ?? 'Daily');
-    setProductSubscriptionQuantity(
-      existingSubscription?.quantity ?? cart.find((item) => item.id === firstProduct.id)?.quantity ?? 1
-    );
+    setProductSubscriptionQuantity(initialQuantity);
     setProductSubscriptionDays(existingSubscription?.days ?? weekdays);
     if (existingSubscription) {
       setProductSubscriptionStartDate(existingSubscription.startDate);
     }
     setProductSubscriptionEndDate(existingSubscription?.endDate ?? null);
     setIsEditingSubscriptionDate(false);
+  };
+
+  const setSubscriptionQuantityForProduct = (product: Product, quantity: number) => {
+    const productId = String(product.id);
+    const nextQuantity = Math.max(1, quantity);
+    setProductSubscriptionQuantity(nextQuantity);
+    setSubscriptionQuantities((current) => ({ ...current, [productId]: nextQuantity }));
   };
 
   const toggleSubscriptionDay = (day: string) => {
@@ -1299,7 +1328,7 @@ export default function App() {
 
   const renderHomeContent = () => (
     <ScrollView
-      style={styles.page}
+      style={styles.scrollPage}
       contentContainerStyle={styles.homeScrollContent}
       showsVerticalScrollIndicator={false}
       scrollEnabled={true}
@@ -1454,7 +1483,7 @@ export default function App() {
 
   const renderProfileContent = () => (
     <ScrollView
-      style={styles.page}
+      style={styles.scrollPage}
       contentContainerStyle={styles.profileScrollContent}
       showsVerticalScrollIndicator={false}
     >
@@ -1834,11 +1863,22 @@ export default function App() {
                 Profile: '👤',
               };
               return (
-                <TouchableOpacity key={tab} style={styles.tabItem} onPress={() => {
+                <TouchableOpacity
+                  key={tab}
+                  style={styles.tabItem}
+                  accessibilityLabel={tab === 'Cart' && cart.length > 0 ? `Cart, ${cart.length} items` : tab}
+                  onPress={() => {
                   setActiveTab(tab);
                   if (tab === 'Profile' && apiEnabled && authToken) void refreshServerSubscriptions();
                 }}>
-                  <Text style={[styles.tabIcon, isSelected && styles.tabIconSelected]}>{iconMap[tab]}</Text>
+                  <View style={styles.tabIconWrap}>
+                    <Text style={[styles.tabIcon, isSelected && styles.tabIconSelected]}>{iconMap[tab]}</Text>
+                    {tab === 'Cart' && cart.length > 0 && (
+                      <View style={[styles.cartBadge, styles.tabCartBadge]}>
+                        <Text style={styles.cartBadgeText}>{cart.length}</Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={[styles.tabText, isSelected && styles.tabTextSelected]}>{tab}</Text>
                 </TouchableOpacity>
               );
@@ -1960,7 +2000,11 @@ export default function App() {
                               onPress={() => {
                                 setSubscriptionProduct(product);
                                 setProductSubscriptionPlan('Daily');
-                                setProductSubscriptionQuantity(cart.find((item) => item.id === product.id)?.quantity ?? 1);
+                                setProductSubscriptionQuantity(
+                                  subscriptionQuantities[String(product.id)]
+                                    ?? cart.find((item) => item.id === product.id)?.quantity
+                                    ?? 1
+                                );
                                 setProductSubscriptionDays(weekdays);
                               }}
                             >
@@ -2066,7 +2110,7 @@ export default function App() {
                         <TouchableOpacity
                           accessibilityLabel="Decrease subscription quantity"
                           style={styles.subscriptionQuantityButton}
-                          onPress={() => setProductSubscriptionQuantity((quantity) => Math.max(1, quantity - 1))}
+                          onPress={() => setSubscriptionQuantityForProduct(subscriptionProduct, productSubscriptionQuantity - 1)}
                         >
                           <Text style={styles.subscriptionQuantityButtonText}>−</Text>
                         </TouchableOpacity>
@@ -2074,7 +2118,7 @@ export default function App() {
                         <TouchableOpacity
                           accessibilityLabel="Increase subscription quantity"
                           style={[styles.subscriptionQuantityButton, styles.subscriptionQuantityButtonPrimary]}
-                          onPress={() => setProductSubscriptionQuantity((quantity) => quantity + 1)}
+                          onPress={() => setSubscriptionQuantityForProduct(subscriptionProduct, productSubscriptionQuantity + 1)}
                         >
                           <Text style={[styles.subscriptionQuantityButtonText, styles.subscriptionQuantityButtonTextPrimary]}>+</Text>
                         </TouchableOpacity>
@@ -2432,23 +2476,26 @@ const styles = StyleSheet.create({
   },
   page: {
     flex: 1,
-    paddingHorizontal: isSmallScreen ? 12 : 16,
-    paddingBottom: 110,
-    paddingTop: Platform.OS === 'android' ? 8 : 0,
+    paddingHorizontal: isSmallScreen ? 8 : 12,
+    paddingBottom: 88,
+    paddingTop: Platform.OS === 'android' ? 4 : 0,
+  },
+  scrollPage: {
+    flex: 1,
   },
   homeScrollContent: {
-    paddingHorizontal: isSmallScreen ? 12 : 16,
-    paddingBottom: 110,
-    paddingTop: Platform.OS === 'android' ? 8 : 0,
+    paddingHorizontal: isSmallScreen ? 8 : 12,
+    paddingBottom: 88,
+    paddingTop: Platform.OS === 'android' ? 4 : 0,
   },
   profileScrollContent: {
-    paddingHorizontal: isSmallScreen ? 12 : 16,
-    paddingBottom: 110,
-    paddingTop: Platform.OS === 'android' ? 8 : 0,
+    paddingHorizontal: isSmallScreen ? 8 : 12,
+    paddingBottom: 88,
+    paddingTop: Platform.OS === 'android' ? 4 : 0,
   },
   headerWrap: {
-    paddingTop: Platform.OS === 'android' ? 16 : 12,
-    marginBottom: 12,
+    paddingTop: 8,
+    marginBottom: 8,
   },
   headerTop: {
     flexDirection: 'row',
@@ -3736,9 +3783,9 @@ const styles = StyleSheet.create({
   },
   bottomTabbar: {
     position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 18,
+    left: 12,
+    right: 12,
+    bottom: 12,
     backgroundColor: '#FFFFFF',
     borderRadius: 22,
     flexDirection: 'row',
@@ -3755,6 +3802,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
+  },
+  tabIconWrap: {
+    width: 28,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabCartBadge: {
+    top: -2,
+    right: -2,
   },
   tabIcon: {
     fontSize: isSmallScreen ? 18 : 20,
@@ -4165,9 +4222,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F7FA',
   },
   paymentContent: {
-    paddingHorizontal: isSmallScreen ? 12 : 16,
-    paddingTop: 16,
-    paddingBottom: 28,
+    paddingHorizontal: isSmallScreen ? 8 : 12,
+    paddingTop: 8,
+    paddingBottom: 20,
   },
   backButton: {
     alignSelf: 'flex-start',
