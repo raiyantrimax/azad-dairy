@@ -462,17 +462,30 @@ export default function App() {
 
       const token = await getAuthToken();
       if (!token || cancelled) return;
+      let user: ApiUser;
       try {
-        const { user } = await apiRequest<{ user: ApiUser }>('/api/auth/me', {}, token);
-        const { subscriptions } = await apiRequest<{ subscriptions: ApiSubscription[] }>('/api/me/subscriptions', {}, token);
-        if (cancelled) return;
-        setAuthToken(token);
-        setCurrentUser(user);
-        setAddresses(user.addresses.map(mapApiAddress));
-        setSelectedAddressId(user.addresses.find((address) => address.isDefault)?.id ?? user.addresses[0]?.id ?? '');
-        setServerSubscriptions(subscriptions);
+        ({ user } = await apiRequest<{ user: ApiUser }>('/api/auth/me', {}, token));
       } catch {
         await removeAuthToken();
+        if (!cancelled) {
+          setAuthToken(null);
+          setCurrentUser(null);
+          setServerSubscriptions([]);
+          setAddresses([]);
+          setSelectedAddressId('');
+        }
+        return;
+      }
+      if (cancelled) return;
+      setAuthToken(token);
+      setCurrentUser(user);
+      setAddresses(user.addresses.map(mapApiAddress));
+      setSelectedAddressId(user.addresses.find((address) => address.isDefault)?.id ?? user.addresses[0]?.id ?? '');
+      try {
+        const { subscriptions } = await apiRequest<{ subscriptions: ApiSubscription[] }>('/api/me/subscriptions', {}, token);
+        if (!cancelled) setServerSubscriptions(subscriptions);
+      } catch (error) {
+        if (!cancelled) setServiceError(error instanceof Error ? error.message : 'Subscriptions could not be loaded.');
       }
     };
 
@@ -740,7 +753,7 @@ export default function App() {
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const productDiscountTotal = cart.reduce((sum, item) => sum + Math.max(0, (item.originalPrice ?? item.price) - item.price) * item.quantity, 0);
   const deliveryCharge = subtotal > 0 ? 29 : 0;
-  const total = Math.max(0, subtotal + deliveryCharge - (appliedCoupon?.savings ?? 0));
+  const total = Math.max(0, Math.round((subtotal + deliveryCharge - (appliedCoupon?.savings ?? 0)) * 100) / 100);
   const selectedAddress = addresses.find((item) => item.id === selectedAddressId) ?? addresses[0];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -1221,15 +1234,14 @@ export default function App() {
             <Text style={styles.iconText}>🛒</Text>
             {cart.length > 0 && <View style={styles.cartBadge}><Text style={styles.cartBadgeText}>{cart.length}</Text></View>}
           </TouchableOpacity>
-          {currentUser?.role === 'admin' && (
-            <TouchableOpacity
-              accessibilityLabel="Open admin portal"
-              style={styles.iconButton}
-              onPress={() => void Linking.openURL(resolveApiUrl('/admin/'))}
-            >
-              <Text style={styles.iconText}>▦</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            accessibilityLabel="Admin login"
+            style={[styles.iconButton, styles.adminPortalButton]}
+            onPress={() => void Linking.openURL(resolveApiUrl('/admin/'))}
+          >
+            <Text style={styles.adminPortalIcon}>▦</Text>
+            <Text style={styles.adminPortalLabel}>Admin</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -4208,5 +4220,21 @@ const styles = StyleSheet.create({
     height: 42,
     borderRadius: 8,
     marginRight: 9,
+  },
+  adminPortalButton: {
+    width: 'auto',
+    minWidth: isSmallScreen ? 62 : 68,
+    paddingHorizontal: 6,
+    flexDirection: 'row',
+    gap: 4,
+  },
+  adminPortalIcon: {
+    color: '#374151',
+    fontSize: 14,
+  },
+  adminPortalLabel: {
+    color: '#374151',
+    fontSize: 10,
+    fontWeight: '700',
   },
 });

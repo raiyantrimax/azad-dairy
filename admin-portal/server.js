@@ -218,7 +218,7 @@ const productView = (product) => {
     category: data.category,
     description: data.description,
     unit: data.unit,
-    price: Math.max(0, data.price - sale),
+    price: Math.round(Math.max(0, data.price - sale) * 100) / 100,
     originalPrice: data.price,
     mrp: data.mrp,
     stock: data.stock,
