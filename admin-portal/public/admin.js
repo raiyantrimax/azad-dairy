@@ -23,6 +23,103 @@
   };
   const statusPill = (value) => `<span class="status-pill ${escapeHtml(String(value).toLowerCase())}">${escapeHtml(value)}</span>`;
   const emptyRow = (columns, message) => `<tr><td colspan="${columns}"><div class="empty-state">${escapeHtml(message)}</div></td></tr>`;
+  const dateTime = (value) => value ? new Date(value).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+
+  function detailFields(fields) {
+    return `<dl class="detail-fields">${fields.map(([label, value]) => `
+      <div><dt>${escapeHtml(label)}</dt><dd>${value === null || value === undefined || value === '' ? '—' : escapeHtml(value)}</dd></div>
+    `).join('')}</dl>`;
+  }
+
+  function detailSection(title, fields) {
+    return `<section class="detail-section"><h3>${escapeHtml(title)}</h3>${detailFields(fields)}</section>`;
+  }
+
+  function detailAddresses(title, addresses = []) {
+    if (!addresses.length) return `<section class="detail-section"><h3>${escapeHtml(title)}</h3><p class="muted">No address on file.</p></section>`;
+    return `<section class="detail-section"><h3>${escapeHtml(title)}</h3><div class="detail-addresses">${addresses.map((address, index) => `
+      <article class="detail-address"><h4>${escapeHtml(address.label || `Address ${index + 1}`)}${address.isDefault ? ' · Default' : ''}</h4>
+        ${detailFields([
+          ['Recipient', address.recipientName], ['Phone', address.phone], ['Address line 1', address.line1], ['Address line 2', address.line2],
+          ['City', address.city], ['State', address.state], ['Postal code', address.postalCode], ['Landmark', address.landmark],
+          ['Coordinates', [address.latitude, address.longitude].filter((value) => value !== undefined && value !== null).join(', ')],
+        ])}
+      </article>`).join('')}</div></section>`;
+  }
+
+  function orderAddress(address) {
+    if (!address) return '<p class="muted">No delivery address saved for this order.</p>';
+    const labels = {
+      label: 'Address type', recipientName: 'Recipient', phone: 'Phone', line1: 'Address line 1', line2: 'Address line 2',
+      city: 'City', state: 'State', postalCode: 'Postal code', landmark: 'Landmark', latitude: 'Latitude', longitude: 'Longitude',
+    };
+    return detailFields(Object.entries(address).map(([key, value]) => [labels[key] || key, value]));
+  }
+
+  function orderItems(items = []) {
+    if (!items.length) return '<p class="muted">No line items recorded.</p>';
+    return `<div class="detail-items">${items.map((item) => `
+      <article><div><strong>${escapeHtml(item.name || 'Product')}</strong><small>${escapeHtml(item.unit || '')} · Qty ${escapeHtml(item.quantity)}</small></div>
+        ${detailFields([['List price', money(item.listPrice)], ['Unit price', money(item.unitPrice)], ['Discount', money(item.discount)], ['Line total', money(item.lineTotal)]])}
+      </article>`).join('')}</div>`;
+  }
+
+  function openDetails(type, id) {
+    const collections = { user: state.users, product: state.products, order: state.orders, subscription: state.subscriptions, coupon: state.coupons };
+    const item = collections[type]?.find((record) => String(record.id || record._id) === String(id));
+    if (!item) return;
+
+    let title = '';
+    let body = '';
+    if (type === 'user') {
+      title = item.name || 'Customer';
+      body = detailSection('Customer', [
+        ['Name', item.name], ['Email', item.email], ['Phone', item.phone], ['Status', item.status], ['Joined', dateTime(item.createdAt)],
+      ]) + detailAddresses('Saved addresses', item.addresses);
+    } else if (type === 'product') {
+      title = item.name || 'Product';
+      body = detailSection('Product information', [
+        ['Name', item.name], ['Slug', item.slug], ['Category', item.category], ['Description', item.description], ['Unit', item.unit],
+        ['Selling price', money(item.price)], ['Original price', money(item.originalPrice)], ['MRP', money(item.mrp)], ['Stock', item.stock],
+        ['Rating', item.rating], ['Tags', (item.tags || []).join(', ')], ['Display image / fallback', item.image],
+        ['Subscription allowed', item.subscriptionAllowed ? 'Yes' : 'No'],
+        ['Visible in store', item.active ? 'Yes' : 'No'], ['Discount', `${item.discount?.value || 0} ${item.discount?.kind || 'percentage'}`],
+        ['Discount starts', dateTime(item.discount?.startsAt)], ['Discount ends', dateTime(item.discount?.endsAt)],
+        ['Created', dateTime(item.createdAt)], ['Updated', dateTime(item.updatedAt)],
+      ]) + ((item.images || []).length ? `<section class="detail-section"><h3>Product images</h3><div class="detail-gallery">${item.images.map((url, index) => `<img src="${escapeHtml(url)}" alt="${escapeHtml(item.name)} image ${index + 1}">`).join('')}</div></section>` : '');
+    } else if (type === 'order') {
+      title = item.orderNumber || 'Order';
+      body = detailSection('Order and customer', [
+        ['Order number', item.orderNumber], ['Status', item.status], ['Placed', dateTime(item.createdAt)], ['Updated', dateTime(item.updatedAt)],
+        ['Customer', item.user?.name], ['Email', item.user?.email], ['Phone', item.user?.phone], ['Coupon code', item.couponCode],
+      ]) + `<section class="detail-section"><h3>Items</h3>${orderItems(item.items)}</section>` + detailSection('Totals', [
+        ['Subtotal', money(item.subtotal)], ['Product discount', money(item.productDiscount)], ['Coupon discount', money(item.couponDiscount)],
+        ['Delivery fee', money(item.deliveryFee)], ['Total', money(item.total)],
+      ]) + `<section class="detail-section"><h3>Delivery address</h3>${orderAddress(item.addressSnapshot)}</section>`
+        + (item.subscriptionSnapshot ? detailSection('Subscription purchased', Object.entries(item.subscriptionSnapshot).map(([key, value]) => [key, typeof value === 'object' && value ? JSON.stringify(value) : value])) : '');
+    } else if (type === 'subscription') {
+      title = `${item.plan || 'Plan'} subscription`;
+      body = detailSection('Subscription', [
+        ['Customer', item.userName], ['Customer email', item.userEmail], ['Customer ID', item.userId], ['Product', item.product?.name],
+        ['Product ID', item.productId], ['Unit', item.product?.unit], ['Unit price', money(item.product?.price)], ['Plan', item.plan],
+        ['Quantity', item.quantity], ['Delivery days', (item.deliveryDays || []).join(', ')], ['Starts', dateTime(item.startDate)],
+        ['Ends', dateTime(item.endDate)], ['Status', item.status], ['Created', dateTime(item.createdAt)], ['End reason', item.endReason],
+      ]);
+    } else {
+      title = item.code || 'Coupon';
+      body = detailSection('Coupon', [
+        ['Code', item.code], ['Description', item.description], ['Discount type', item.kind], ['Discount value', item.value],
+        ['Minimum order', money(item.minimumOrder)], ['Maximum discount', item.maximumDiscount ? money(item.maximumDiscount) : 'No cap'],
+        ['Starts', dateTime(item.startsAt)], ['Ends', dateTime(item.endsAt)], ['Uses', `${item.usedCount || 0} / ${item.maxUses || 'Unlimited'}`],
+        ['Product IDs', (item.productIds || []).map(String).join(', ') || 'All products'], ['Active', item.active ? 'Yes' : 'No'],
+        ['Created', dateTime(item.createdAt)], ['Updated', dateTime(item.updatedAt)],
+      ]);
+    }
+
+    $('#detailTitle').textContent = title;
+    $('#detailBody').innerHTML = body;
+    $('#detailDialog').showModal();
+  }
 
   async function request(path, options = {}) {
     const headers = new Headers(options.headers || {});
@@ -117,7 +214,7 @@
     state.users = result.users;
     $('#usersTable').innerHTML = state.users.length ? state.users.map((user) => `
       <tr>
-        <td><strong>${escapeHtml(user.name)}</strong><small>${escapeHtml(user.email)}</small></td>
+        <td><button class="detail-link" data-detail-user="${escapeHtml(user.id)}">${escapeHtml(user.name)}</button><small>${escapeHtml(user.email)}</small></td>
         <td>${escapeHtml(user.phone || '—')}</td>
         <td>${user.addresses?.length || 0}</td>
         <td>${date(user.createdAt)}</td>
@@ -135,7 +232,7 @@
       const discount = Number(product.discount?.value || 0);
       const discountLabel = discount ? `${discount}${product.discount.kind === 'percentage' ? '%' : '₹'} off` : '—';
       return `<tr>
-        <td><div class="product-cell"><span class="product-thumb">${image}</span><span><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.unit)} · ${product.subscriptionAllowed ? 'Subscription enabled' : 'One-time only'}</small></span></div></td>
+        <td><div class="product-cell"><span class="product-thumb">${image}</span><span><button class="detail-link" data-detail-product="${escapeHtml(product.id)}">${escapeHtml(product.name)}</button><small>${escapeHtml(product.unit)} · ${product.subscriptionAllowed ? 'Subscription enabled' : 'One-time only'}</small></span></div></td>
         <td>${escapeHtml(product.category)}</td>
         <td><strong>${money(product.price)}</strong><small>MRP ${money(product.mrp)}</small></td>
         <td>${escapeHtml(discountLabel)}</td>
@@ -158,7 +255,7 @@
         : 'No address saved';
       const statusOptions = ['placed', 'processing', 'delivered', 'cancelled'].map((status) => `<option value="${status}" ${order.status === status ? 'selected' : ''}>${status}</option>`).join('');
       return `<tr>
-        <td><strong>${escapeHtml(order.orderNumber)}</strong><small>${escapeHtml(order.couponCode || 'No coupon')}</small></td>
+        <td><button class="detail-link" data-detail-order="${escapeHtml(order._id)}">${escapeHtml(order.orderNumber)}</button><small>${escapeHtml(order.couponCode || 'No coupon')}</small></td>
         <td><strong>${escapeHtml(customer)}</strong><small>${escapeHtml(order.user?.email || '')}</small></td>
         <td>${date(order.createdAt)}</td>
         <td><small>${escapeHtml(lines || '—')}</small>${order.subscriptionSnapshot ? `<small>↻ ${escapeHtml(order.subscriptionSnapshot.productName)} · ${escapeHtml(order.subscriptionSnapshot.plan)}</small>` : ''}</td>
@@ -183,12 +280,12 @@
       <tr>
         <td><strong>${escapeHtml(subscription.userName || 'Customer')}</strong><small>${escapeHtml(subscription.userEmail || '')}</small></td>
         <td><strong>${escapeHtml(subscription.product?.name || 'Product')}</strong><small>${escapeHtml(subscription.product?.unit || '')}</small></td>
-        <td>${escapeHtml(subscription.plan)}${subscription.deliveryDays?.length ? `<small>${escapeHtml(subscription.deliveryDays.join(', '))}</small>` : ''}</td>
+        <td><button class="detail-link" data-detail-subscription="${escapeHtml(subscription.id)}">${escapeHtml(subscription.plan)}</button>${subscription.deliveryDays?.length ? `<small>${escapeHtml(subscription.deliveryDays.join(', '))}</small>` : ''}</td>
         <td>${Number(subscription.quantity)}</td>
         <td>${date(subscription.startDate)}</td>
         <td>${date(subscription.endDate)}</td>
         <td>${statusPill(subscription.status)}</td>
-        <td><div class="table-actions"><button class="action-button" data-edit-subscription="${escapeHtml(subscription.id)}">Edit</button></div></td>
+        <td><div class="table-actions"><button class="action-button" data-detail-subscription="${escapeHtml(subscription.id)}">View</button><button class="action-button" data-edit-subscription="${escapeHtml(subscription.id)}">Edit</button></div></td>
       </tr>
     `).join('') : emptyRow(8, 'No subscriptions match this filter.');
   }
@@ -198,13 +295,13 @@
     state.coupons = result.coupons;
     $('#couponsTable').innerHTML = state.coupons.length ? state.coupons.map((coupon) => `
       <tr>
-        <td><strong>${escapeHtml(coupon.code)}</strong><small>${escapeHtml(coupon.description || '')}</small></td>
+        <td><button class="detail-link" data-detail-coupon="${escapeHtml(coupon._id)}">${escapeHtml(coupon.code)}</button><small>${escapeHtml(coupon.description || '')}</small></td>
         <td>${coupon.kind === 'percentage' ? `${Number(coupon.value)}%` : money(coupon.value)}${coupon.maximumDiscount ? `<small>Cap ${money(coupon.maximumDiscount)}</small>` : ''}</td>
         <td>${money(coupon.minimumOrder)}</td>
         <td>${Number(coupon.usedCount)} / ${coupon.maxUses ? Number(coupon.maxUses) : '∞'}</td>
         <td>${date(coupon.endsAt)}</td>
         <td>${statusPill(coupon.active ? 'active' : 'disabled')}</td>
-        <td><div class="table-actions"><button class="action-button" data-edit-coupon="${escapeHtml(coupon._id)}">Edit</button><button class="action-button danger" data-delete-coupon="${escapeHtml(coupon._id)}">Delete</button></div></td>
+        <td><div class="table-actions"><button class="action-button" data-detail-coupon="${escapeHtml(coupon._id)}">View</button><button class="action-button" data-edit-coupon="${escapeHtml(coupon._id)}">Edit</button><button class="action-button danger" data-delete-coupon="${escapeHtml(coupon._id)}">Delete</button></div></td>
       </tr>
     `).join('') : emptyRow(7, 'No coupons yet. Add a promotion code.');
   }
@@ -383,6 +480,12 @@
   async function onTableClick(event) {
     const button = event.target.closest('button');
     if (!button) return;
+    for (const type of ['user', 'product', 'order', 'subscription', 'coupon']) {
+      if (button.dataset[`detail${type[0].toUpperCase()}${type.slice(1)}`]) {
+        openDetails(type, button.dataset[`detail${type[0].toUpperCase()}${type.slice(1)}`]);
+        return;
+      }
+    }
     if (button.dataset.editUser) {
       const user = state.users.find((item) => item.id === button.dataset.editUser);
       if (user) openUserDialog(user);
@@ -448,6 +551,7 @@
   $('#subscriptionForm').addEventListener('submit', saveSubscription);
   $('#usersTable').addEventListener('click', onTableClick);
   $('#productsTable').addEventListener('click', onTableClick);
+  $('#ordersTable').addEventListener('click', onTableClick);
   $('#ordersTable').addEventListener('change', updateOrderStatus);
   $('#subscriptionsTable').addEventListener('click', onTableClick);
   $('#couponsTable').addEventListener('click', onTableClick);

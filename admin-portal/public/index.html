@@ -48,6 +48,13 @@
       </header>
       <div id="globalNotice" class="notice" role="status" hidden></div>
 
+      <dialog id="detailDialog" class="detail-dialog">
+        <div class="detail-content">
+          <div class="dialog-heading"><div><p class="eyebrow">RECORD DETAILS</p><h2 id="detailTitle">Details</h2></div><button type="button" class="icon-button" data-close="detailDialog" aria-label="Close">×</button></div>
+          <div id="detailBody" class="detail-body"></div>
+        </div>
+      </dialog>
+
       <section id="view-dashboard" class="view-section">
         <div class="view-heading"><div><h2>Today at a glance</h2><p class="muted">Orders and subscription activity from your store.</p></div></div>
         <div class="stat-grid">

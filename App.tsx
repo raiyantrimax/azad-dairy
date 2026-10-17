@@ -493,6 +493,48 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    if (!apiEnabled) return;
+    let cancelled = false;
+    let refreshing = false;
+
+    const refreshRemoteData = async () => {
+      if (refreshing) return;
+      refreshing = true;
+      try {
+        const { products: remoteProducts } = await apiRequest<{ products: ApiProduct[] }>('/api/products');
+        if (!cancelled) {
+          const updatedProducts = remoteProducts.map(mapApiProduct);
+          const findUpdatedProduct = (product: Product) =>
+            updatedProducts.find((updated) => String(updated.id) === String(product.id)) || product;
+          setStoreProducts(updatedProducts);
+          setCart((current) => current.map((item) => ({ ...findUpdatedProduct(item), quantity: item.quantity })));
+          setSelectedProduct((current) => current ? findUpdatedProduct(current) : null);
+          setSubscriptionProduct((current) => current ? findUpdatedProduct(current) : null);
+          setSubscriptionProductChoices((current) => current.map(findUpdatedProduct));
+        }
+      } catch {
+        // Keep the last successful catalog while the service is unavailable.
+      }
+
+      if (authToken && !cancelled) {
+        try {
+          const { subscriptions } = await apiRequest<{ subscriptions: ApiSubscription[] }>('/api/me/subscriptions', {}, authToken);
+          if (!cancelled) setServerSubscriptions(subscriptions);
+        } catch {
+          // Keep the last successful subscription list while the service is unavailable.
+        }
+      }
+      refreshing = false;
+    };
+
+    const interval = setInterval(() => { void refreshRemoteData(); }, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [authToken]);
+
   const submitAuth = async () => {
     setAuthError(null);
     setIsAuthSubmitting(true);

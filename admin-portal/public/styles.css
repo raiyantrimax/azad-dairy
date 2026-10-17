@@ -112,6 +112,26 @@ td small { margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1
 .action-button { min-height: 29px; padding: 0 8px; color: #52625a; background: #fff; border: 1px solid var(--line); border-radius: 5px; font-size: 10px; font-weight: 700; }
 .action-button:hover { color: var(--green); border-color: #9ec5b2; }
 .action-button.danger { color: var(--red); }
+.detail-link { padding: 0; color: var(--green-dark); background: transparent; border: 0; font: inherit; font-weight: 750; text-align: left; }
+.detail-link:hover { color: var(--green); text-decoration: underline; }
+.detail-dialog { width: min(760px, calc(100vw - 28px)); max-width: 760px; max-height: calc(100dvh - 28px); padding: 0; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 24px 90px #0c291f44; }
+.detail-dialog::backdrop { background: #10251e88; backdrop-filter: blur(2px); }
+.detail-content { display: grid; gap: 16px; max-height: calc(100dvh - 28px); overflow-y: auto; padding: 22px; }
+.detail-body { display: grid; gap: 18px; }
+.detail-section { min-width: 0; }
+.detail-section h3 { margin: 0 0 10px; color: var(--green-dark); font-size: 13px; }
+.detail-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; margin: 0; }
+.detail-fields > div { min-width: 0; padding: 9px 0; border-bottom: 1px solid #edf0ee; }
+.detail-fields dt { color: var(--muted); font-size: 10px; }
+.detail-fields dd { margin: 4px 0 0; overflow-wrap: anywhere; color: var(--ink); font-size: 12px; }
+.detail-addresses, .detail-items { display: grid; gap: 10px; }
+.detail-address, .detail-items article { padding: 13px; border: 1px solid var(--line); border-radius: 7px; background: #fbfcfb; }
+.detail-address h4 { margin: 0 0 5px; font-size: 12px; }
+.detail-items article { display: grid; gap: 7px; }
+.detail-items article > div:first-child strong, .detail-items article > div:first-child small { display: block; }
+.detail-items article > div:first-child small { margin-top: 3px; color: var(--muted); font-size: 10px; }
+.detail-gallery { display: flex; flex-wrap: wrap; gap: 8px; }
+.detail-gallery img { width: 78px; height: 78px; object-fit: cover; border: 1px solid var(--line); border-radius: 6px; }
 .product-cell { display: flex; align-items: center; gap: 9px; min-width: 175px; }
 .product-thumb { width: 36px; height: 36px; display: grid; place-items: center; flex: none; overflow: hidden; border-radius: 6px; background: #edf3ef; font-size: 20px; }
 .product-thumb img { width: 100%; height: 100%; object-fit: cover; }
@@ -165,6 +185,8 @@ td small { margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1
   .panel-heading { padding: 12px; }
   .compact-list { padding: 2px 12px; }
   .form-grid { grid-template-columns: 1fr; }
+  .detail-content { padding: 17px; }
+  .detail-fields { grid-template-columns: 1fr; }
   .span-two { grid-column: auto; }
   .editor-form { padding: 17px; }
   .search-input { width: 45%; min-width: 130px; }

@@ -231,6 +231,8 @@ const productView = (product) => {
     active: data.active !== false,
     discount: data.discount || { kind: 'percentage', value: 0 },
     discountAmount: sale,
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
   };
 };
 const productBody = (body) => {
@@ -321,6 +323,7 @@ const subscriptionView = (subscription) => ({
   startDate: subscription.startDate,
   endDate: subscription.endDate,
   status: subscription.status,
+  endReason: subscription.endReason,
   createdAt: subscription.createdAt,
 });
 
@@ -774,7 +777,7 @@ app.delete('/api/admin/coupons/:id', asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
-app.use('/admin', express.static(path.join(process.cwd(), 'public')));
+app.use('/admin', express.static(path.join(path.dirname(require.resolve('./server.js')), 'public')));
 app.get('/', (_req, res) => res.redirect('/admin/'));
 
 app.use((error, _req, res, _next) => {
