@@ -90,6 +90,9 @@
       ]) + ((item.images || []).length ? `<section class="detail-section"><h3>Product images</h3><div class="detail-gallery">${item.images.map((url, index) => `<img src="${escapeHtml(url)}" alt="${escapeHtml(item.name)} image ${index + 1}">`).join('')}</div></section>` : '');
     } else if (type === 'order') {
       title = item.orderNumber || 'Order';
+      const subscriptionSnapshots = item.subscriptionSnapshots?.length
+        ? item.subscriptionSnapshots
+        : item.subscriptionSnapshot ? [item.subscriptionSnapshot] : [];
       body = detailSection('Order and customer', [
         ['Order number', item.orderNumber], ['Status', item.status], ['Placed', dateTime(item.createdAt)], ['Updated', dateTime(item.updatedAt)],
         ['Customer', item.user?.name], ['Email', item.user?.email], ['Phone', item.user?.phone], ['Coupon code', item.couponCode],
@@ -97,7 +100,10 @@
         ['Subtotal', money(item.subtotal)], ['Product discount', money(item.productDiscount)], ['Coupon discount', money(item.couponDiscount)],
         ['Delivery fee', money(item.deliveryFee)], ['Total', money(item.total)],
       ]) + `<section class="detail-section"><h3>Delivery address</h3>${orderAddress(item.addressSnapshot)}</section>`
-        + (item.subscriptionSnapshot ? detailSection('Subscription purchased', Object.entries(item.subscriptionSnapshot).map(([key, value]) => [key, typeof value === 'object' && value ? JSON.stringify(value) : value])) : '');
+        + subscriptionSnapshots.map((snapshot, index) => detailSection(
+          `Subscription ${index + 1} · ${snapshot.productName || 'Product'}`,
+          Object.entries(snapshot).map(([key, value]) => [key, typeof value === 'object' && value ? JSON.stringify(value) : value]),
+        )).join('');
     } else if (type === 'subscription') {
       title = `${item.plan || 'Plan'} subscription`;
       body = detailSection('Subscription', [
@@ -256,12 +262,15 @@
       const deliveryAddress = address
         ? [address.line1, address.line2, address.city, address.state, address.postalCode].filter(Boolean).join(', ')
         : 'No address saved';
+      const subscriptionSnapshots = order.subscriptionSnapshots?.length
+        ? order.subscriptionSnapshots
+        : order.subscriptionSnapshot ? [order.subscriptionSnapshot] : [];
       const statusOptions = ['placed', 'processing', 'delivered', 'cancelled'].map((status) => `<option value="${status}" ${order.status === status ? 'selected' : ''}>${status}</option>`).join('');
       return `<tr>
         <td><button class="detail-link" data-detail-order="${escapeHtml(order._id)}">${escapeHtml(order.orderNumber)}</button><small>${escapeHtml(order.couponCode || 'No coupon')}</small></td>
         <td><strong>${escapeHtml(customer)}</strong><small>${escapeHtml(order.user?.email || '')}</small></td>
         <td>${date(order.createdAt)}</td>
-        <td><small>${escapeHtml(lines || '—')}</small>${order.subscriptionSnapshot ? `<small>↻ ${escapeHtml(order.subscriptionSnapshot.productName)} · ${escapeHtml(order.subscriptionSnapshot.plan)}</small>` : ''}</td>
+        <td><small>${escapeHtml(lines || '—')}</small>${subscriptionSnapshots.map((snapshot) => `<small>↻ ${escapeHtml(snapshot.productName)} · ${escapeHtml(snapshot.plan)} · Qty ${escapeHtml(snapshot.quantity)} per delivery</small>`).join('')}</td>
         <td><small>${escapeHtml(deliveryAddress)}</small></td>
         <td>${money(Number(order.productDiscount || 0) + Number(order.couponDiscount || 0))}</td>
         <td><strong>${money(order.total)}</strong></td>

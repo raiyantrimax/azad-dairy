@@ -131,6 +131,8 @@ const orderSchema = new mongoose.Schema({
   couponDiscount: { type: Number, default: 0 },
   deliveryFee: { type: Number, default: 0 },
   total: { type: Number, required: true },
+  subscriptions: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Subscription' }],
+  subscriptionSnapshots: [mongoose.Schema.Types.Mixed],
   subscription: { type: mongoose.Schema.Types.ObjectId, ref: 'Subscription', default: null },
   subscriptionSnapshot: mongoose.Schema.Types.Mixed,
 }, { timestamps: true });
@@ -512,12 +514,17 @@ app.post('/api/orders', requireAuth(), asyncHandler(async (req, res) => {
     couponDiscount = Math.round(Math.min(subtotal, coupon.maximumDiscount ? Math.min(rawDiscount, coupon.maximumDiscount) : rawDiscount) * 100) / 100;
   }
 
-  let subscription;
-  let subscriptionData;
-  let subscriptionSnapshot;
-  if (req.body.subscription) {
-    const input = req.body.subscription;
-    const product = productsById.get(String(input.productId));
+  const requestedSubscriptions = Array.isArray(req.body.subscriptions) && req.body.subscriptions.length
+    ? req.body.subscriptions
+    : req.body.subscription ? [req.body.subscription] : [];
+  const subscriptionData = [];
+  const subscriptionSnapshots = [];
+  const subscribedProductIds = new Set();
+  for (const input of requestedSubscriptions) {
+    const productId = String(input.productId || '');
+    if (subscribedProductIds.has(productId)) return res.status(400).json({ error: 'A product can only have one subscription per order.' });
+    subscribedProductIds.add(productId);
+    const product = productsById.get(productId);
     if (!product || !product.subscriptionAllowed) return res.status(400).json({ error: 'This product cannot be subscribed to.' });
     const startDate = new Date(input.startDate);
     const endDate = input.endDate ? new Date(input.endDate) : null;
@@ -528,18 +535,19 @@ app.post('/api/orders', requireAuth(), asyncHandler(async (req, res) => {
     const deliveryDays = parseList(input.deliveryDays).filter((day) => ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].includes(day));
     if (!plan || quantity < 1 || (plan === 'Weekly' && !deliveryDays.length)) return res.status(400).json({ error: 'Choose a valid plan, quantity and delivery days.' });
     const status = startDate > todayStart() ? 'scheduled' : 'active';
-    subscriptionData = {
+    const unitPrice = productView(product).price;
+    subscriptionData.push({
       user: req.user._id,
       product: product._id,
-      productSnapshot: { name: product.name, unit: product.unit, image: product.image, price: productView(product).price },
+      productSnapshot: { name: product.name, unit: product.unit, image: product.image, price: unitPrice },
       plan,
       quantity,
       deliveryDays: plan === 'Weekly' ? deliveryDays : [],
       startDate,
       endDate,
       status,
-    };
-    subscriptionSnapshot = {
+    });
+    subscriptionSnapshots.push({
       productId: String(product._id),
       productName: product.name,
       plan,
@@ -547,10 +555,10 @@ app.post('/api/orders', requireAuth(), asyncHandler(async (req, res) => {
       deliveryDays: plan === 'Weekly' ? deliveryDays : [],
       startDate,
       endDate,
-      unitPrice: productView(product).price,
-      totalPerDelivery: Math.round(productView(product).price * quantity * 100) / 100,
+      unitPrice,
+      totalPerDelivery: Math.round(unitPrice * quantity * 100) / 100,
       status,
-    };
+    });
   }
 
   const selectedAddress = req.user.addresses.id(req.body.addressId) || req.user.addresses.find((address) => address.isDefault) || req.user.addresses[0];
@@ -558,11 +566,14 @@ app.post('/api/orders', requireAuth(), asyncHandler(async (req, res) => {
   const total = Math.max(0, Math.round((subtotal + deliveryFee - couponDiscount) * 100) / 100);
   const session = await mongoose.startSession();
   let order;
+  let createdSubscriptions = [];
   try {
     await session.withTransaction(async () => {
-      if (subscriptionData) {
-        subscription = new Subscription(subscriptionData);
+      createdSubscriptions = [];
+      for (const data of subscriptionData) {
+        const subscription = new Subscription(data);
         await subscription.save({ session });
+        createdSubscriptions.push(subscription);
       }
       const [createdOrder] = await Order.create([{
         user: req.user._id,
@@ -576,8 +587,10 @@ app.post('/api/orders', requireAuth(), asyncHandler(async (req, res) => {
         couponDiscount,
         deliveryFee,
         total,
-        subscription: subscription?._id || null,
-        subscriptionSnapshot,
+        subscriptions: createdSubscriptions.map((subscription) => subscription._id),
+        subscriptionSnapshots,
+        subscription: createdSubscriptions[0]?._id || null,
+        subscriptionSnapshot: subscriptionSnapshots[0] || null,
       }], { session });
       order = createdOrder;
 
@@ -600,7 +613,14 @@ app.post('/api/orders', requireAuth(), asyncHandler(async (req, res) => {
   } finally {
     await session.endSession();
   }
-  res.status(201).json({ order, subscription: subscription ? subscriptionView(await subscription.populate('product')) : null });
+  const populatedSubscriptions = await Promise.all(createdSubscriptions.map(async (subscription) => (
+    subscriptionView(await subscription.populate('product'))
+  )));
+  res.status(201).json({
+    order,
+    subscription: populatedSubscriptions[0] || null,
+    subscriptions: populatedSubscriptions,
+  });
 }));
 
 const storage = multer.memoryStorage();

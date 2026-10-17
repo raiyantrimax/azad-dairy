@@ -377,6 +377,12 @@ const defaultAddresses: Address[] = [
 const subscriptionPlans: ProductSubscriptionPlan[] = ['Daily', 'Weekly', 'Alternate', 'Monthly'];
 const weekdays = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 const formatSubscriptionDate = (date: Date) => date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+const createDefaultSubscriptionStartDate = () => {
+  const startDate = new Date();
+  startDate.setHours(0, 0, 0, 0);
+  startDate.setDate(startDate.getDate() + 1);
+  return startDate;
+};
 const isSameCalendarDay = (first: Date, second: Date) =>
   first.getFullYear() === second.getFullYear()
   && first.getMonth() === second.getMonth()
@@ -393,12 +399,7 @@ export default function App() {
   const [productSubscriptionQuantity, setProductSubscriptionQuantity] = useState(1);
   const [subscriptionQuantities, setSubscriptionQuantities] = useState<Record<string, number>>({});
   const [productSubscriptionDays, setProductSubscriptionDays] = useState<string[]>(['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']);
-  const [productSubscriptionStartDate, setProductSubscriptionStartDate] = useState(() => {
-    const tomorrow = new Date();
-    tomorrow.setHours(0, 0, 0, 0);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow;
-  });
+  const [productSubscriptionStartDate, setProductSubscriptionStartDate] = useState(createDefaultSubscriptionStartDate);
   const [productSubscriptionEndDate, setProductSubscriptionEndDate] = useState<Date | null>(null);
   const [subscriptionCalendarMonth, setSubscriptionCalendarMonth] = useState(
     () => new Date(productSubscriptionStartDate.getFullYear(), productSubscriptionStartDate.getMonth(), 1)
@@ -425,7 +426,7 @@ export default function App() {
   ]);
   const [showPayment, setShowPayment] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
-  const [checkoutSubscription, setCheckoutSubscription] = useState<ProductSubscription | null>(null);
+  const [checkoutSubscriptions, setCheckoutSubscriptions] = useState<ProductSubscription[]>([]);
   const [addresses, setAddresses] = useState<Address[]>(defaultAddresses);
   const [selectedAddressId, setSelectedAddressId] = useState<string | number>(1);
   const [locationModalVisible, setLocationModalVisible] = useState(false);
@@ -572,7 +573,7 @@ export default function App() {
     setServerSubscriptions([]);
     setAddresses(apiEnabled ? [] : defaultAddresses);
     setSelectedAddressId(apiEnabled ? '' : defaultAddresses[0].id);
-    setCheckoutSubscription(null);
+    setCheckoutSubscriptions([]);
     setAppliedCoupon(null);
   };
 
@@ -797,6 +798,10 @@ export default function App() {
   const productDiscountTotal = cart.reduce((sum, item) => sum + Math.max(0, (item.originalPrice ?? item.price) - item.price) * item.quantity, 0);
   const deliveryCharge = subtotal > 0 ? 29 : 0;
   const total = Math.max(0, Math.round((subtotal + deliveryCharge - (appliedCoupon?.savings ?? 0)) * 100) / 100);
+  const subscriptionPerDeliveryTotal = checkoutSubscriptions.reduce(
+    (sum, subscription) => sum + subscription.product.price * subscription.quantity,
+    0
+  );
   const selectedAddress = addresses.find((item) => item.id === selectedAddressId) ?? addresses[0];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -825,13 +830,10 @@ export default function App() {
 
   const updateCartQuantity = (productId: string | number, delta: number) => {
     const item = cart.find((cartItem) => String(cartItem.id) === String(productId));
-    if (
-      item
-      && item.quantity + delta <= 0
-      && checkoutSubscription
-      && String(checkoutSubscription.product.id) === String(productId)
-    ) {
-      setCheckoutSubscription(null);
+    if (item && item.quantity + delta <= 0) {
+      setCheckoutSubscriptions((current) => current.filter(
+        (subscription) => String(subscription.product.id) !== String(productId)
+      ));
     }
     setCart((current) =>
       current
@@ -848,15 +850,22 @@ export default function App() {
   ) => {
     const firstProduct = existingSubscription?.product ?? productsToSubscribe[0];
     if (!firstProduct) return;
+    const savedSubscription = checkoutSubscriptions.find(
+      (subscription) => String(subscription.product.id) === String(firstProduct.id)
+    ) ?? existingSubscription;
     const initialQuantities: Record<string, number> = {};
     productsToSubscribe.forEach((product) => {
       const productId = String(product.id);
-      initialQuantities[productId] = subscriptionQuantities[productId]
+      const savedProductSubscription = checkoutSubscriptions.find(
+        (subscription) => String(subscription.product.id) === productId
+      );
+      initialQuantities[productId] = savedProductSubscription?.quantity
+        ?? subscriptionQuantities[productId]
         ?? cart.find((item) => item.id === product.id)?.quantity
         ?? 1;
     });
-    if (existingSubscription) initialQuantities[String(firstProduct.id)] = existingSubscription.quantity;
-    const initialQuantity = existingSubscription?.quantity
+    if (savedSubscription) initialQuantities[String(firstProduct.id)] = savedSubscription.quantity;
+    const initialQuantity = savedSubscription?.quantity
       ?? initialQuantities[String(firstProduct.id)]
       ?? cart.find((item) => item.id === firstProduct.id)?.quantity
       ?? 1;
@@ -864,13 +873,57 @@ export default function App() {
     setSubscriptionQuantities(initialQuantities);
     setSubscriptionProductChoices(productsToSubscribe);
     setSubscriptionProduct(firstProduct);
-    setProductSubscriptionPlan(existingSubscription?.plan ?? 'Daily');
+    setProductSubscriptionPlan(savedSubscription?.plan ?? 'Daily');
     setProductSubscriptionQuantity(initialQuantity);
-    setProductSubscriptionDays(existingSubscription?.days ?? weekdays);
-    if (existingSubscription) {
-      setProductSubscriptionStartDate(existingSubscription.startDate);
+    setProductSubscriptionDays(savedSubscription?.days ?? weekdays);
+    setProductSubscriptionStartDate(savedSubscription?.startDate ?? createDefaultSubscriptionStartDate());
+    setProductSubscriptionEndDate(savedSubscription?.endDate ?? null);
+    setIsEditingSubscriptionDate(false);
+  };
+
+  const saveCurrentProductSubscription = () => {
+    if (!subscriptionProduct) return false;
+    if (productSubscriptionPlan === 'Weekly' && productSubscriptionDays.length === 0) {
+      Alert.alert('Choose delivery days', 'Select at least one day for your weekly subscription.');
+      return false;
     }
-    setProductSubscriptionEndDate(existingSubscription?.endDate ?? null);
+
+    const subscription: ProductSubscription = {
+      product: subscriptionProduct,
+      plan: productSubscriptionPlan,
+      quantity: productSubscriptionQuantity,
+      days: productSubscriptionDays,
+      startDate: productSubscriptionStartDate,
+      endDate: productSubscriptionEndDate,
+    };
+    setCheckoutSubscriptions((current) => [
+      ...current.filter((item) => String(item.product.id) !== String(subscription.product.id)),
+      subscription,
+    ]);
+    return true;
+  };
+
+  const selectSubscriptionProduct = (product: Product) => {
+    const productId = String(product.id);
+    if (
+      subscriptionProduct
+      && String(subscriptionProduct.id) !== productId
+      && !saveCurrentProductSubscription()
+    ) return;
+    const savedSubscription = checkoutSubscriptions.find(
+      (subscription) => String(subscription.product.id) === productId
+    );
+    setSubscriptionProduct(product);
+    setProductSubscriptionPlan(savedSubscription?.plan ?? 'Daily');
+    setProductSubscriptionQuantity(
+      savedSubscription?.quantity
+        ?? subscriptionQuantities[productId]
+        ?? cart.find((item) => item.id === product.id)?.quantity
+        ?? 1
+    );
+    setProductSubscriptionDays(savedSubscription?.days ?? weekdays);
+    setProductSubscriptionStartDate(savedSubscription?.startDate ?? createDefaultSubscriptionStartDate());
+    setProductSubscriptionEndDate(savedSubscription?.endDate ?? null);
     setIsEditingSubscriptionDate(false);
   };
 
@@ -888,21 +941,7 @@ export default function App() {
   };
 
   const saveProductSubscription = () => {
-    if (!subscriptionProduct) return;
-    if (productSubscriptionPlan === 'Weekly' && productSubscriptionDays.length === 0) {
-      Alert.alert('Choose delivery days', 'Select at least one day for your weekly subscription.');
-      return;
-    }
-
-    const newSubscription: ProductSubscription = {
-      product: subscriptionProduct,
-      plan: productSubscriptionPlan,
-      quantity: productSubscriptionQuantity,
-      days: productSubscriptionDays,
-      startDate: productSubscriptionStartDate,
-      endDate: productSubscriptionEndDate,
-    };
-    setCheckoutSubscription(newSubscription);
+    if (!saveCurrentProductSubscription() || !subscriptionProduct) return;
     if (!showPayment) {
       setCart((current) => current.some((item) => item.id === subscriptionProduct.id)
         ? current
@@ -1616,18 +1655,18 @@ export default function App() {
           <Text style={styles.cardTitle}>How would you like your order?</Text>
           <View style={styles.subscriptionChoiceRow}>
             <TouchableOpacity
-              style={[styles.subscriptionChoiceButton, !checkoutSubscription && styles.subscriptionChoiceButtonSelected]}
-              onPress={() => setCheckoutSubscription(null)}
+              style={[styles.subscriptionChoiceButton, checkoutSubscriptions.length === 0 && styles.subscriptionChoiceButtonSelected]}
+              onPress={() => setCheckoutSubscriptions([])}
             >
-              <Text style={[styles.subscriptionChoiceText, !checkoutSubscription && styles.subscriptionChoiceTextSelected]}>
+              <Text style={[styles.subscriptionChoiceText, checkoutSubscriptions.length === 0 && styles.subscriptionChoiceTextSelected]}>
                 One-time
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.subscriptionChoiceButton, checkoutSubscription && styles.subscriptionChoiceButtonSelected]}
-              onPress={() => openSubscriptionBuilder(cart, checkoutSubscription)}
+              style={[styles.subscriptionChoiceButton, checkoutSubscriptions.length > 0 && styles.subscriptionChoiceButtonSelected]}
+              onPress={() => openSubscriptionBuilder(cart, checkoutSubscriptions[0] ?? null)}
             >
-              <Text style={[styles.subscriptionChoiceText, checkoutSubscription && styles.subscriptionChoiceTextSelected]}>
+              <Text style={[styles.subscriptionChoiceText, checkoutSubscriptions.length > 0 && styles.subscriptionChoiceTextSelected]}>
                 Subscribe
               </Text>
             </TouchableOpacity>
@@ -1636,7 +1675,7 @@ export default function App() {
         </View>
 
         <View style={styles.summaryCard}>
-          <Text style={styles.cardTitle}>{checkoutSubscription ? 'Order and subscription' : 'Order summary'}</Text>
+          <Text style={styles.cardTitle}>{checkoutSubscriptions.length ? 'Order and subscriptions' : 'Order summary'}</Text>
           {cart.map((item) => (
             <View key={item.id} style={styles.paymentItemRow}>
               <Text style={styles.paymentItemText}>{item.name} x{item.quantity}</Text>
@@ -1688,44 +1727,64 @@ export default function App() {
             <Text style={styles.summaryValue}>₹{deliveryCharge}</Text>
           </View>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabelStrong}>Total</Text>
+            <Text style={styles.summaryLabelStrong}>Order total</Text>
             <Text style={styles.summaryValueStrong}>₹{total}</Text>
           </View>
-          {checkoutSubscription && (
+          {checkoutSubscriptions.length > 0 && (
             <View style={styles.subscriptionOrderDetails}>
-              <Text style={styles.subscriptionOrderTitle}>Recurring subscription</Text>
-              <Text style={styles.subscriptionOrderProduct}>
-                {checkoutSubscription.product.image}  {checkoutSubscription.product.name}
-              </Text>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Plan</Text>
-                <Text style={styles.summaryValue}>{checkoutSubscription.plan}</Text>
-              </View>
-              {checkoutSubscription.plan === 'Weekly' && (
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Delivery days</Text>
-                  <Text style={styles.summaryValue}>{checkoutSubscription.days.join(', ')}</Text>
+              <Text style={styles.subscriptionOrderTitle}>Recurring subscriptions</Text>
+              {checkoutSubscriptions.map((subscription, index) => (
+                <View
+                  key={subscription.product.id}
+                  style={index > 0 ? { borderTopWidth: 1, borderTopColor: '#E5E7EB', marginTop: 10, paddingTop: 10 } : undefined}
+                >
+                  <Text style={styles.subscriptionOrderProduct}>
+                    {subscription.product.image}  {subscription.product.name}
+                  </Text>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Plan</Text>
+                    <Text style={styles.summaryValue}>{subscription.plan}</Text>
+                  </View>
+                  {subscription.plan === 'Weekly' && (
+                    <View style={styles.summaryRow}>
+                      <Text style={styles.summaryLabel}>Delivery days</Text>
+                      <Text style={styles.summaryValue}>{subscription.days.join(', ')}</Text>
+                    </View>
+                  )}
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Quantity per delivery</Text>
+                    <Text style={styles.summaryValue}>{subscription.quantity}</Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Starts</Text>
+                    <Text style={styles.summaryValue}>{formatSubscriptionDate(subscription.startDate)}</Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Ends</Text>
+                    <Text style={styles.summaryValue}>
+                      {subscription.endDate ? formatSubscriptionDate(subscription.endDate) : 'No end date'}
+                    </Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Per delivery</Text>
+                    <Text style={styles.summaryValueStrong}>
+                      ₹{subscription.product.price * subscription.quantity}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    accessibilityLabel={`Remove ${subscription.product.name} subscription`}
+                    style={styles.cancelSubscriptionButton}
+                    onPress={() => setCheckoutSubscriptions((current) => current.filter(
+                      (item) => String(item.product.id) !== String(subscription.product.id)
+                    ))}
+                  >
+                    <Text style={styles.cancelSubscriptionText}>Remove subscription</Text>
+                  </TouchableOpacity>
                 </View>
-              )}
+              ))}
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Quantity per delivery</Text>
-                <Text style={styles.summaryValue}>{checkoutSubscription.quantity}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Starts</Text>
-                <Text style={styles.summaryValue}>{formatSubscriptionDate(checkoutSubscription.startDate)}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Ends</Text>
-                <Text style={styles.summaryValue}>
-                  {checkoutSubscription.endDate ? formatSubscriptionDate(checkoutSubscription.endDate) : 'No end date'}
-                </Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabelStrong}>Subscription per delivery</Text>
-                <Text style={styles.summaryValueStrong}>
-                  ₹{checkoutSubscription.product.price * checkoutSubscription.quantity}
-                </Text>
+                <Text style={styles.summaryLabelStrong}>Subscription subtotal per delivery</Text>
+                <Text style={styles.summaryValueStrong}>₹{subscriptionPerDeliveryTotal}</Text>
               </View>
             </View>
           )}
@@ -1742,7 +1801,7 @@ export default function App() {
           onPress={() => void placeOrder()}
         >
           <Text style={styles.primaryButtonText}>
-            {isPlacingOrder ? 'Placing order...' : checkoutSubscription ? 'Place order with subscription' : 'Place order'}
+            {isPlacingOrder ? 'Placing order...' : checkoutSubscriptions.length ? 'Place order with subscriptions' : 'Place order'}
           </Text>
         </TouchableOpacity>
       </ScrollView>
@@ -1769,36 +1828,48 @@ export default function App() {
         const result = await apiRequest<{
           order: ApiOrder;
           subscription: ApiSubscription | null;
+          subscriptions?: ApiSubscription[];
         }>('/api/orders', {
           method: 'POST',
           body: JSON.stringify({
             items: cart.map((item) => ({ productId: String(item.id), quantity: item.quantity })),
             couponCode: appliedCoupon?.code || '',
             addressId: selectedAddressId ? String(selectedAddressId) : undefined,
-            subscription: checkoutSubscription ? {
-              productId: String(checkoutSubscription.product.id),
-              plan: checkoutSubscription.plan,
-              quantity: checkoutSubscription.quantity,
-              deliveryDays: checkoutSubscription.days,
-              startDate: checkoutSubscription.startDate.toISOString().slice(0, 10),
-              endDate: checkoutSubscription.endDate?.toISOString().slice(0, 10) ?? null,
+            subscriptions: checkoutSubscriptions.map((subscription) => ({
+              productId: String(subscription.product.id),
+              plan: subscription.plan,
+              quantity: subscription.quantity,
+              deliveryDays: subscription.days,
+              startDate: subscription.startDate.toISOString().slice(0, 10),
+              endDate: subscription.endDate?.toISOString().slice(0, 10) ?? null,
+            })),
+            subscription: checkoutSubscriptions[0] ? {
+              productId: String(checkoutSubscriptions[0].product.id),
+              plan: checkoutSubscriptions[0].plan,
+              quantity: checkoutSubscriptions[0].quantity,
+              deliveryDays: checkoutSubscriptions[0].days,
+              startDate: checkoutSubscriptions[0].startDate.toISOString().slice(0, 10),
+              endDate: checkoutSubscriptions[0].endDate?.toISOString().slice(0, 10) ?? null,
             } : undefined,
           }),
         }, authToken);
 
-        if (result.subscription) {
+        if (result.subscriptions?.length || result.subscription) {
           const { subscriptions } = await apiRequest<{ subscriptions: ApiSubscription[] }>('/api/me/subscriptions', {}, authToken);
           setServerSubscriptions(subscriptions);
         }
         setCart([]);
-        setCheckoutSubscription(null);
+        setCheckoutSubscriptions([]);
         setAppliedCoupon(null);
         setCouponCode('');
         setShowPayment(false);
         setActiveTab('Home');
-        const subscriptionConfirmation = result.order.subscriptionSnapshot
-          ? `\n\nSubscription: ${result.order.subscriptionSnapshot.productName}\nPlan: ${result.order.subscriptionSnapshot.plan}\nQuantity: ${result.order.subscriptionSnapshot.quantity} per delivery\nStarts: ${formatSubscriptionDate(new Date(result.order.subscriptionSnapshot.startDate))}\nEnds: ${result.order.subscriptionSnapshot.endDate ? formatSubscriptionDate(new Date(result.order.subscriptionSnapshot.endDate)) : 'No end date'}${result.order.subscriptionSnapshot.deliveryDays.length ? `\nDelivery days: ${result.order.subscriptionSnapshot.deliveryDays.join(', ')}` : ''}`
-          : '';
+        const subscriptionSnapshots = result.order.subscriptionSnapshots?.length
+          ? result.order.subscriptionSnapshots
+          : result.order.subscriptionSnapshot ? [result.order.subscriptionSnapshot] : [];
+        const subscriptionConfirmation = subscriptionSnapshots.map((snapshot) =>
+          `\n\nSubscription: ${snapshot.productName}\nPlan: ${snapshot.plan}\nQuantity: ${snapshot.quantity} per delivery\nStarts: ${formatSubscriptionDate(new Date(snapshot.startDate))}\nEnds: ${snapshot.endDate ? formatSubscriptionDate(new Date(snapshot.endDate)) : 'No end date'}${snapshot.deliveryDays.length ? `\nDelivery days: ${snapshot.deliveryDays.join(', ')}` : ''}`
+        ).join('');
         Alert.alert('Order placed', `Order ${result.order.orderNumber}\nTotal: ₹${result.order.total}${subscriptionConfirmation}`);
       } catch (error) {
         Alert.alert('Order could not be placed', error instanceof Error ? error.message : 'Check your connection and try again.');
@@ -1808,24 +1879,26 @@ export default function App() {
       return;
     }
 
-    if (checkoutSubscription) {
-      const orderedSubscription = checkoutSubscription;
+    if (checkoutSubscriptions.length) {
       setActiveProductSubscriptions((current) => [
-        ...current.filter((item) => item.product.id !== orderedSubscription.product.id),
-        orderedSubscription,
+        ...current.filter((item) => !checkoutSubscriptions.some(
+          (subscription) => String(subscription.product.id) === String(item.product.id)
+        )),
+        ...checkoutSubscriptions,
       ]);
-      const deliveryDays = orderedSubscription.plan === 'Weekly'
-        ? `\nDelivery days: ${orderedSubscription.days.join(', ')}`
-        : '';
+      const subscriptionConfirmation = checkoutSubscriptions.map((subscription) => {
+        const deliveryDays = subscription.plan === 'Weekly' ? `\nDelivery days: ${subscription.days.join(', ')}` : '';
+        return `Subscription: ${subscription.product.name}\nPlan: ${subscription.plan}${deliveryDays}\nQuantity: ${subscription.quantity} per delivery\nStarts: ${formatSubscriptionDate(subscription.startDate)}\nSubscription per delivery: ₹${subscription.product.price * subscription.quantity}`;
+      }).join('\n\n');
       Alert.alert(
-        'Order placed with subscription',
-        `Your cart order has been placed.\n\nSubscription: ${orderedSubscription.product.name}\nPlan: ${orderedSubscription.plan}${deliveryDays}\nQuantity: ${orderedSubscription.quantity} per delivery\nStarts: ${formatSubscriptionDate(orderedSubscription.startDate)}\nSubscription per delivery: ₹${orderedSubscription.product.price * orderedSubscription.quantity}`
+        'Order placed with subscriptions',
+        `Your cart order has been placed.\n\n${subscriptionConfirmation}`
       );
     } else {
       Alert.alert('Order placed', 'Your order has been placed successfully.');
     }
     setCart([]);
-    setCheckoutSubscription(null);
+    setCheckoutSubscriptions([]);
     setAppliedCoupon(null);
     setCouponCode('');
     setShowPayment(false);
@@ -1991,21 +2064,18 @@ export default function App() {
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subscriptionItemRow}>
                         {subscriptionProductChoices.map((product) => {
                           const isSelected = subscriptionProduct.id === product.id;
+                          const isIncluded = checkoutSubscriptions.some(
+                            (subscription) => String(subscription.product.id) === String(product.id)
+                          );
                           return (
                             <TouchableOpacity
                               key={product.id}
                               accessibilityRole="button"
                               accessibilityState={{ selected: isSelected }}
+                              accessibilityLabel={`Choose ${product.name}${isIncluded ? ', subscription selected' : ''}`}
                               style={[styles.subscriptionItemChip, isSelected && styles.subscriptionItemChipSelected]}
                               onPress={() => {
-                                setSubscriptionProduct(product);
-                                setProductSubscriptionPlan('Daily');
-                                setProductSubscriptionQuantity(
-                                  subscriptionQuantities[String(product.id)]
-                                    ?? cart.find((item) => item.id === product.id)?.quantity
-                                    ?? 1
-                                );
-                                setProductSubscriptionDays(weekdays);
+                                selectSubscriptionProduct(product);
                               }}
                             >
                               <Text style={styles.subscriptionItemEmoji}>{product.image}</Text>
@@ -2015,6 +2085,7 @@ export default function App() {
                               >
                                 {product.name}
                               </Text>
+                              {isIncluded && <Text style={[styles.subscriptionItemTextSelected, { marginLeft: 6 }]}>✓</Text>}
                             </TouchableOpacity>
                           );
                         })}

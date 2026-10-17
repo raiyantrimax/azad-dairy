@@ -74,6 +74,7 @@ export type ApiOrder = {
   deliveryFee: number;
   total: number;
   couponCode?: string;
+  subscriptionSnapshots?: ApiOrderSubscriptionSnapshot[];
   subscriptionSnapshot?: {
     productName: string;
     plan: string;
@@ -84,6 +85,19 @@ export type ApiOrder = {
     status: string;
   };
   createdAt: string;
+};
+
+export type ApiOrderSubscriptionSnapshot = {
+  productId: string;
+  productName: string;
+  plan: string;
+  quantity: number;
+  deliveryDays: string[];
+  startDate: string;
+  endDate: string | null;
+  unitPrice: number;
+  totalPerDelivery: number;
+  status: string;
 };
 
 export async function getAuthToken(): Promise<string | null> {
