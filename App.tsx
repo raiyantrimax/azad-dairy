@@ -407,6 +407,7 @@ export default function App() {
   const [isEditingSubscriptionDate, setIsEditingSubscriptionDate] = useState(false);
   const [activeProductSubscriptions, setActiveProductSubscriptions] = useState<ProductSubscription[]>([]);
   const [serverSubscriptions, setServerSubscriptions] = useState<ApiSubscription[]>([]);
+  const [userOrders, setUserOrders] = useState<ApiOrder[]>([]);
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<ApiUser | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>('register');
@@ -420,7 +421,7 @@ export default function App() {
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; savings: number } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
-  const [cart, setCart] = useState<CartItem[]>([
+  const [cart, setCart] = useState<CartItem[]>(apiEnabled ? [] : [
     { ...products[0], quantity: 2 },
     { ...products[4], quantity: 1 },
   ]);
@@ -489,6 +490,12 @@ export default function App() {
       } catch (error) {
         if (!cancelled) setServiceError(error instanceof Error ? error.message : 'Subscriptions could not be loaded.');
       }
+      try {
+        const { orders } = await apiRequest<{ orders: ApiOrder[] }>('/api/me/orders', {}, token);
+        if (!cancelled) setUserOrders(orders);
+      } catch {
+        if (!cancelled) setUserOrders([]);
+      }
     };
 
     void restoreSession();
@@ -526,6 +533,14 @@ export default function App() {
         } catch {
           // Keep the last successful subscription list while the service is unavailable.
         }
+        if (authToken && !cancelled) {
+          try {
+            const { orders } = await apiRequest<{ orders: ApiOrder[] }>('/api/me/orders', {}, authToken);
+            if (!cancelled) setUserOrders(orders);
+          } catch {
+            if (!cancelled) setUserOrders([]);
+          }
+        }
       }
       refreshing = false;
     };
@@ -558,7 +573,9 @@ export default function App() {
       setSelectedAddressId(result.user.addresses.find((address) => address.isDefault)?.id ?? result.user.addresses[0]?.id ?? '');
       setAuthPassword('');
       const { subscriptions } = await apiRequest<{ subscriptions: ApiSubscription[] }>('/api/me/subscriptions', {}, result.token);
+      const { orders } = await apiRequest<{ orders: ApiOrder[] }>('/api/me/orders', {}, result.token);
       setServerSubscriptions(subscriptions);
+      setUserOrders(orders);
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : 'Could not sign in.');
     } finally {
@@ -571,6 +588,7 @@ export default function App() {
     setAuthToken(null);
     setCurrentUser(null);
     setServerSubscriptions([]);
+    setUserOrders([]);
     setAddresses(apiEnabled ? [] : defaultAddresses);
     setSelectedAddressId(apiEnabled ? '' : defaultAddresses[0].id);
     setCheckoutSubscriptions([]);
@@ -783,11 +801,11 @@ export default function App() {
   ]);
 
   const visibleProducts = useMemo(() => {
-    const catalog = storeProducts.length ? storeProducts : products;
+    const catalog = apiEnabled ? storeProducts : products;
     if (selectedCategory === 'All') return catalog;
     return catalog.filter((item) => item.category === selectedCategory);
   }, [selectedCategory, storeProducts]);
-  const additionalCategoryNames = [...new Set(storeProducts.map((product) => product.category))]
+  const additionalCategoryNames = [...new Set((apiEnabled ? storeProducts : products).map((product) => product.category))]
     .filter((name) => !categoryMeta.some((category) => category.name === name));
   const visibleCategories = [
     ...categoryMeta,
@@ -1609,6 +1627,9 @@ export default function App() {
                   {item.plan}{item.plan === 'Weekly' ? ` · ${item.deliveryDays.join(', ')}` : ''} · Qty {item.quantity}
                 </Text>
                 <Text style={styles.profileSubscriptionDetail}>
+                  Total per delivery: ₹{(item.product?.price ?? 0) * item.quantity}
+                </Text>
+                <Text style={styles.profileSubscriptionDetail}>
                   {`Starts ${formatSubscriptionDate(new Date(item.startDate))} · Ends ${item.endDate ? formatSubscriptionDate(new Date(item.endDate)) : 'No end date'}`}
                 </Text>
                 {item.status === 'expired' && <Text style={styles.subscriptionEndedNotice}>This subscription has ended.</Text>}
@@ -1625,12 +1646,46 @@ export default function App() {
                   {item.plan}{item.plan === 'Weekly' ? ` · ${item.days.join(', ')}` : ''} · Qty {item.quantity}
                 </Text>
                 <Text style={styles.profileSubscriptionDetail}>
+                  Total per delivery: ₹{item.product.price * item.quantity}
+                </Text>
+                <Text style={styles.profileSubscriptionDetail}>
                   {`Starts ${formatSubscriptionDate(item.startDate)} · Ends ${item.endDate ? formatSubscriptionDate(item.endDate) : 'No end date'}`}
                 </Text>
               </View>
             ))}
             {(apiEnabled ? serverSubscriptions.length : activeProductSubscriptions.length) === 0 && (
               <Text style={styles.subscriptionInfo}>No subscriptions yet</Text>
+            )}
+          </View>
+
+          <View style={styles.infoCard}>
+            <Text style={styles.cardTitle}>Orders</Text>
+            {userOrders.length ? userOrders.map((order) => {
+              const orderSubscriptionSnapshots = order.subscriptionSnapshots ?? [];
+              return (
+                <View key={order.id} style={styles.profileSubscriptionRow}>
+                  <View style={styles.profileSubscriptionHeader}>
+                    <Text style={styles.subscriptionInfo}>#{order.orderNumber}</Text>
+                    <Text style={[styles.subscriptionStatus, order.status === 'cancelled' && styles.subscriptionStatusEnded]}>{order.status}</Text>
+                  </View>
+                  {order.items.map((item) => (
+                    <View key={`${order.id}-${item.product}`} style={styles.profileOrderItemRow}>
+                      <Text style={styles.profileOrderEmoji}>{item.name ? item.name.split(' ')[0]?.slice(0, 1) || '🧺' : '🧺'}</Text>
+                      <Text style={styles.profileSubscriptionDetail}>{item.name} × {item.quantity}</Text>
+                    </View>
+                  ))}
+                  {orderSubscriptionSnapshots.length > 0 ? orderSubscriptionSnapshots.map((snapshot) => (
+                    <Text key={`${order.id}-${snapshot.productId}-${snapshot.plan}`} style={styles.profileSubscriptionDetail}>
+                      {snapshot.productName} · {snapshot.plan} · Qty {snapshot.quantity} / delivery
+                    </Text>
+                  )) : (
+                    <Text style={styles.profileSubscriptionDetail}>One-time order</Text>
+                  )}
+                  <Text style={styles.profileSubscriptionDetail}>Placed {formatSubscriptionDate(new Date(order.createdAt))} · Total ₹{order.total}</Text>
+                </View>
+              );
+            }) : (
+              <Text style={styles.subscriptionInfo}>No orders yet</Text>
             )}
           </View>
         </>
@@ -1856,7 +1911,9 @@ export default function App() {
 
         if (result.subscriptions?.length || result.subscription) {
           const { subscriptions } = await apiRequest<{ subscriptions: ApiSubscription[] }>('/api/me/subscriptions', {}, authToken);
+          const { orders } = await apiRequest<{ orders: ApiOrder[] }>('/api/me/orders', {}, authToken);
           setServerSubscriptions(subscriptions);
+          setUserOrders(orders);
         }
         setCart([]);
         setCheckoutSubscriptions([]);
@@ -2818,6 +2875,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
     marginLeft: 26,
+  },
+  profileOrderItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+    marginLeft: 4,
+  },
+  profileOrderEmoji: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    overflow: 'hidden',
+    backgroundColor: '#E7F7F1',
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    fontSize: 12,
+    lineHeight: 22,
   },
   productDetailSubscribeButton: {
     alignItems: 'center',
